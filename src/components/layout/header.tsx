@@ -25,7 +25,7 @@ export function Header() {
         <div className="h-6 w-px bg-border" />
 
         <Avatar className="h-8 w-8">
-          <AvatarFallback>HM</AvatarFallback>
+          {/* <AvatarFallback>A</AvatarFallback> */}
         </Avatar>
       </div>
     </header>
