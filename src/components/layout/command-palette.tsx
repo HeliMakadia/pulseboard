@@ -66,33 +66,33 @@ export function CommandPalette() {
     );
   }, [search]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setOpen((current) => !current);
-      }
+ useEffect(() => {
+  function handleKeyDown(event: KeyboardEvent) {
+    if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+      event.preventDefault();
 
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
+      setSearch("");
+      setSelectedIndex(0);
+      setOpen(true);
+    }
 
-    window.addEventListener("keydown", handleKeyDown);
+    if (event.key === "Escape") {
+      setOpen(false);
+    }
+  }
 
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, []);
+  window.addEventListener("keydown", handleKeyDown);
+
+  return () => {
+    window.removeEventListener("keydown", handleKeyDown);
+  };
+}, []);
 
   useEffect(() => {
     if (!open) {
-      setSearch("");
-      setSelectedIndex(0);
-      return;
     }
 
-    setSelectedIndex(0);
+    // setSelectedIndex(0);
   }, [open, search]);
 
   const navigate = (href: string) => {
@@ -125,7 +125,11 @@ export function CommandPalette() {
     <>
       {/* Desktop search button */}
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setSearch("");
+          setSelectedIndex(0);
+          setOpen(true);
+        }}
         className="hidden items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted md:flex"
         aria-label="Open command palette"
       >

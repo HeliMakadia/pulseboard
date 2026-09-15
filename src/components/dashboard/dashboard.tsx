@@ -54,7 +54,7 @@ export function Dashboard() {
           </h1>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            Here's what's happening across your workspace today.
+            Here is what&apos;s happening across your workspace today.
           </p>
         </div>
 
