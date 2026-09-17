@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { KanbanBoard } from "@/components/projects/kanban-board";
 import { useParams } from "next/navigation";
 import {
   CheckCircle2,
@@ -348,44 +349,28 @@ export default function ProjectPage() {
             </div>
           ) : (
             <div className="divide-y">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-start gap-4 px-6 py-4 transition hover:bg-muted/30"
-                >
-                  <div className="mt-0.5">
-                    {task.status === "DONE" ? (
-                      <CheckCircle2 className="h-5 w-5 text-primary" />
-                    ) : task.status === "IN_PROGRESS" ? (
-                      <Clock3 className="h-5 w-5 text-muted-foreground" />
-                    ) : (
-                      <Circle className="h-5 w-5 text-muted-foreground" />
-                    )}
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      {task.title}
-                    </p>
-
-                    {task.description && (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {task.description}
-                      </p>
-                    )}
-
-                    <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{task.status}</span>
-                      <span>•</span>
-                      <span>{task.priority}</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <KanbanBoard
+            tasks={tasks}
+            onTaskUpdated={(updatedTask) => {
+              setTasks((currentTasks) =>
+                currentTasks.map((task) =>
+                  task.id === updatedTask.id
+                    ? updatedTask
+                    : task
+                )
+              );
+            }}
+            onTaskDeleted={(taskId) => {
+              setTasks((currentTasks) =>
+                currentTasks.filter(
+                  (task) => task.id !== taskId
+                )
+              );
+            }}
+             />
             </div>
           )}
         </div>
-
       </div>
     </div>
   );

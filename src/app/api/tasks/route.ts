@@ -58,9 +58,11 @@ export async function POST(request: Request) {
         id: projectId,
       },
       include: {
-        workspace: {
-          include: {
-            members: true,
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
       },
