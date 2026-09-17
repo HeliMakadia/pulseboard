@@ -1,7 +1,7 @@
 "use client";
 
-import { Bell, Search, Command } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/ui/avatar";
+import { Bell } from "lucide-react";
+import { Avatar } from "@/ui/avatar";
 import { CommandPalette } from "./command-palette";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileSidebar } from "./mobile-sidebar";
