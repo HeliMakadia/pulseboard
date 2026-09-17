@@ -4,9 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { KanbanBoard } from "@/components/projects/kanban-board";
 import { useParams } from "next/navigation";
 import {
-  CheckCircle2,
   Circle,
-  Clock3,
   Loader2,
   Plus,
 } from "lucide-react";
@@ -21,13 +19,27 @@ type Project = {
   };
 };
 
+type Member = {
+  id: string;
+  name: string | null;
+  email: string | null;
+  image: string | null;
+  role: string;
+};
+
 type Task = {
   id: string;
   title: string;
   description: string | null;
   status: string;
   priority: string;
+  dueDate: string | null;
   createdAt: string;
+  assignee?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+  } | null;
 };
 
 export default function ProjectPage() {
@@ -36,6 +48,7 @@ export default function ProjectPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -43,98 +56,103 @@ export default function ProjectPage() {
 
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
-
-  async function loadProject() {
-    try {
-      setLoading(true);
-      setError("");
-
-      const [projectResponse, tasksResponse] = await Promise.all([
-        fetch(`/api/projects/${projectId}`, {
-          cache: "no-store",
-        }),
-        fetch(`/api/tasks?projectId=${projectId}`, {
-          cache: "no-store",
-        }),
-      ]);
-
-      const projectData = await projectResponse.json();
-      const tasksData = await tasksResponse.json();
-
-      if (!projectResponse.ok) {
-        setError(projectData.error || "Unable to load project.");
-        return;
-      }
-
-      if (!tasksResponse.ok) {
-        setError(tasksData.error || "Unable to load tasks.");
-        return;
-      }
-
-      setProject(projectData.project);
-      setTasks(tasksData.tasks || []);
-    } catch {
-      setError("Something went wrong while loading the project.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [assigneeId, setAssigneeId] = useState("");
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
-  let cancelled = false;
+    let cancelled = false;
 
-  async function fetchProject() {
-    try {
-      setLoading(true);
-      setError("");
+    async function fetchProject() {
+      try {
+        setLoading(true);
+        setError("");
 
-      const [projectResponse, tasksResponse] = await Promise.all([
-        fetch(`/api/projects/${projectId}`, {
-          cache: "no-store",
-        }),
-        fetch(`/api/tasks?projectId=${projectId}`, {
-          cache: "no-store",
-        }),
-      ]);
+        const [projectResponse, tasksResponse, membersResponse] =
+          await Promise.all([
+            fetch(`/api/projects/${projectId}`, {
+              cache: "no-store",
+            }),
+            fetch(`/api/tasks?projectId=${projectId}`, {
+              cache: "no-store",
+            }),
+            fetch("/api/workspaces/members", {
+              cache: "no-store",
+            }),
+          ]);
 
-      const projectData = await projectResponse.json();
-      const tasksData = await tasksResponse.json();
+        const projectData = await projectResponse.json();
+        const tasksData = await tasksResponse.json();
+        const membersData = await membersResponse.json();
 
-      if (cancelled) {
-        return;
-      }
+        if (cancelled) {
+          return;
+        }
 
-      if (!projectResponse.ok) {
-        setError(projectData.error || "Unable to load project.");
-        return;
-      }
+        if (!projectResponse.ok) {
+          setError(
+            projectData.error || "Unable to load project."
+          );
+          return;
+        }
 
-      if (!tasksResponse.ok) {
-        setError(tasksData.error || "Unable to load tasks.");
-        return;
-      }
+        if (!tasksResponse.ok) {
+          setError(
+            tasksData.error || "Unable to load tasks."
+          );
+          return;
+        }
 
-      setProject(projectData.project);
-      setTasks(tasksData.tasks || []);
-    } catch {
-      if (!cancelled) {
-        setError("Something went wrong while loading the project.");
-      }
-    } finally {
-      if (!cancelled) {
-        setLoading(false);
+        if (!membersResponse.ok) {
+          setError(
+            membersData.error ||
+              "Unable to load workspace members."
+          );
+          return;
+        }
+
+        setProject(projectData.project);
+        setTasks(tasksData.tasks || []);
+
+        const allMembers: Member[] = (
+          membersData.workspaces || []
+        ).flatMap(
+          (workspace: { members: Member[] }) =>
+            workspace.members || []
+        );
+
+        const uniqueMembers = Array.from(
+          new Map(
+            allMembers.map((member) => [
+              member.id,
+              member,
+            ])
+          ).values()
+        );
+
+        setMembers(uniqueMembers);
+      } catch {
+        if (!cancelled) {
+          setError(
+            "Something went wrong while loading the project."
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
       }
     }
-  }
 
-  fetchProject();
+    fetchProject();
 
-  return () => {
-    cancelled = true;
-  };
-}, [projectId]);
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
 
-  async function createTask(event: FormEvent<HTMLFormElement>) {
+  async function createTask(
+    event: FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     if (!taskTitle.trim()) {
@@ -152,24 +170,40 @@ export default function ProjectPage() {
         },
         body: JSON.stringify({
           title: taskTitle.trim(),
-          description: taskDescription.trim(),
+          description:
+            taskDescription.trim() || null,
           projectId,
+          assigneeId: assigneeId || null,
+          dueDate: dueDate
+            ? new Date(
+                `${dueDate}T23:59:59`
+              ).toISOString()
+            : null,
         }),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Unable to create task.");
+        setError(
+          data.error || "Unable to create task."
+        );
         return;
       }
 
-      setTasks((current) => [data.task, ...current]);
+      setTasks((current) => [
+        data.task,
+        ...current,
+      ]);
 
       setTaskTitle("");
       setTaskDescription("");
+      setAssigneeId("");
+      setDueDate("");
     } catch {
-      setError("Something went wrong while creating the task.");
+      setError(
+        "Something went wrong while creating the task."
+      );
     } finally {
       setCreating(false);
     }
@@ -229,7 +263,8 @@ export default function ProjectPage() {
           </div>
 
           <p className="mt-3 max-w-2xl text-sm text-muted-foreground">
-            {project.description || "No description provided."}
+            {project.description ||
+              "No description provided."}
           </p>
         </div>
 
@@ -269,7 +304,9 @@ export default function ProjectPage() {
         {/* Create Task */}
         <div className="mb-8 rounded-xl border bg-card">
           <div className="border-b px-6 py-4">
-            <h2 className="font-semibold">Create task</h2>
+            <h2 className="font-semibold">
+              Create task
+            </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
               Add a task to this project.
@@ -280,6 +317,7 @@ export default function ProjectPage() {
             onSubmit={createTask}
             className="space-y-4 p-6"
           >
+            {/* Title */}
             <input
               type="text"
               placeholder="What needs to be done?"
@@ -290,20 +328,86 @@ export default function ProjectPage() {
               className="h-11 w-full rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
 
+            {/* Description */}
             <textarea
               rows={3}
               placeholder="Add a description (optional)"
               value={taskDescription}
               onChange={(event) =>
-                setTaskDescription(event.target.value)
+                setTaskDescription(
+                  event.target.value
+                )
               }
               className="w-full resize-none rounded-lg border bg-background px-3 py-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
 
+            {/* Assignee + Due Date */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="task-assignee"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Assignee
+                </label>
+
+                <select
+                  id="task-assignee"
+                  value={assigneeId}
+                  onChange={(event) =>
+                    setAssigneeId(
+                      event.target.value
+                    )
+                  }
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">
+                    Unassigned
+                  </option>
+
+                  {members.map((member) => (
+                    <option
+                      key={member.id}
+                      value={member.id}
+                    >
+                      {member.name ||
+                        member.email ||
+                        "Unnamed member"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="task-due-date"
+                  className="mb-2 block text-sm font-medium"
+                >
+                  Due date
+                </label>
+
+                <input
+                  id="task-due-date"
+                  type="date"
+                  value={dueDate}
+                  onChange={(event) =>
+                    setDueDate(
+                      event.target.value
+                    )
+                  }
+                  className="h-11 w-full rounded-lg border bg-background px-3 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
+                />
+              </div>
+            </div>
+
+            {/* Submit */}
             <div className="flex justify-end">
               <button
                 type="submit"
-                disabled={creating || !taskTitle.trim()}
+                disabled={
+                  creating ||
+                  !taskTitle.trim()
+                }
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {creating ? (
@@ -312,7 +416,9 @@ export default function ProjectPage() {
                   <Plus className="h-4 w-4" />
                 )}
 
-                {creating ? "Creating..." : "Create task"}
+                {creating
+                  ? "Creating..."
+                  : "Create task"}
               </button>
             </div>
           </form>
@@ -328,7 +434,9 @@ export default function ProjectPage() {
         {/* Tasks */}
         <div className="rounded-xl border bg-card">
           <div className="border-b px-6 py-4">
-            <h2 className="font-semibold">Tasks</h2>
+            <h2 className="font-semibold">
+              Tasks
+            </h2>
 
             <p className="mt-1 text-sm text-muted-foreground">
               Tasks currently belonging to this project.
@@ -341,33 +449,37 @@ export default function ProjectPage() {
                 <Circle className="h-5 w-5 text-muted-foreground" />
               </div>
 
-              <p className="font-medium">No tasks yet</p>
+              <p className="font-medium">
+                No tasks yet
+              </p>
 
               <p className="mt-1 text-sm text-muted-foreground">
                 Create your first task above.
               </p>
             </div>
           ) : (
-            <div className="divide-y">
-            <KanbanBoard
-            tasks={tasks}
-            onTaskUpdated={(updatedTask) => {
-              setTasks((currentTasks) =>
-                currentTasks.map((task) =>
-                  task.id === updatedTask.id
-                    ? updatedTask
-                    : task
-                )
-              );
-            }}
-            onTaskDeleted={(taskId) => {
-              setTasks((currentTasks) =>
-                currentTasks.filter(
-                  (task) => task.id !== taskId
-                )
-              );
-            }}
-             />
+            <div className="p-4">
+              <KanbanBoard
+                tasks={tasks}
+                onTaskUpdated={(updatedTask) => {
+                  setTasks((currentTasks) =>
+                    currentTasks.map((task) =>
+                      task.id ===
+                      updatedTask.id
+                        ? updatedTask
+                        : task
+                    )
+                  );
+                }}
+                onTaskDeleted={(taskId) => {
+                  setTasks((currentTasks) =>
+                    currentTasks.filter(
+                      (task) =>
+                        task.id !== taskId
+                    )
+                  );
+                }}
+              />
             </div>
           )}
         </div>

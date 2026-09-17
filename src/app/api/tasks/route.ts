@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
 
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Unauthorized." },
+        { error: "Unauthorized" },
         { status: 401 }
       );
     }
@@ -16,15 +16,31 @@ export async function POST(request: Request) {
     const body = await request.json();
 
     const title =
-      typeof body.title === "string" ? body.title.trim() : "";
+      typeof body.title === "string"
+        ? body.title.trim()
+        : "";
 
     const description =
       typeof body.description === "string"
         ? body.description.trim()
-        : "";
+        : null;
 
     const projectId =
-      typeof body.projectId === "string" ? body.projectId : "";
+      typeof body.projectId === "string"
+        ? body.projectId
+        : "";
+
+    const assigneeId =
+      typeof body.assigneeId === "string" &&
+      body.assigneeId.trim()
+        ? body.assigneeId
+        : null;
+
+    const dueDate =
+      typeof body.dueDate === "string" &&
+      body.dueDate.trim()
+        ? new Date(body.dueDate)
+        : null;
 
     if (!title) {
       return NextResponse.json(
@@ -35,7 +51,24 @@ export async function POST(request: Request) {
 
     if (!projectId) {
       return NextResponse.json(
-        { error: "Project is required." },
+        { error: "Project ID is required." },
+        { status: 400 }
+      );
+    }
+
+    if (title.length > 200) {
+      return NextResponse.json(
+        {
+          error:
+            "Task title must be 200 characters or less.",
+        },
+        { status: 400 }
+      );
+    }
+
+    if (dueDate && Number.isNaN(dueDate.getTime())) {
+      return NextResponse.json(
+        { error: "Invalid due date." },
         { status: 400 }
       );
     }
@@ -58,11 +91,13 @@ export async function POST(request: Request) {
         id: projectId,
       },
       include: {
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
+        workspace: {
+          include: {
+            members: {
+              select: {
+                userId: true,
+              },
+            },
           },
         },
       },
@@ -75,9 +110,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const isMember = project.workspace.members.some(
-      (member) => member.userId === user.id
-    );
+    const isMember =
+      project.workspace.members.some(
+        (member) => member.userId === user.id
+      );
 
     if (!isMember) {
       return NextResponse.json(
@@ -86,23 +122,51 @@ export async function POST(request: Request) {
       );
     }
 
+    if (assigneeId) {
+      const assigneeIsMember =
+        project.workspace.members.some(
+          (member) => member.userId === assigneeId
+        );
+
+      if (!assigneeIsMember) {
+        return NextResponse.json(
+          {
+            error:
+              "The selected assignee is not a member of this workspace.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const task = await prisma.task.create({
       data: {
         title,
         description: description || null,
         projectId,
+        assigneeId,
+        dueDate,
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
     return NextResponse.json(
-      {
-        message: "Task created successfully.",
-        task,
-      },
+      { task },
       { status: 201 }
     );
   } catch (error) {
-    console.error("Create task error:", error);
+    console.error(
+      "POST /api/tasks error:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Unable to create task." },
@@ -117,13 +181,16 @@ export async function GET(request: Request) {
 
     if (!session?.user?.email) {
       return NextResponse.json(
-        { error: "Unauthorized." },
+        { error: "Unauthorized" },
         { status: 401 }
       );
     }
 
-    const { searchParams } = new URL(request.url);
-    const projectId = searchParams.get("projectId");
+    const { searchParams } =
+      new URL(request.url);
+
+    const projectId =
+      searchParams.get("projectId");
 
     if (!projectId) {
       return NextResponse.json(
@@ -152,7 +219,11 @@ export async function GET(request: Request) {
       include: {
         workspace: {
           include: {
-            members: true,
+            members: {
+              select: {
+                userId: true,
+              },
+            },
           },
         },
       },
@@ -165,9 +236,10 @@ export async function GET(request: Request) {
       );
     }
 
-    const isMember = project.workspace.members.some(
-      (member) => member.userId === user.id
-    );
+    const isMember =
+      project.workspace.members.some(
+        (member) => member.userId === user.id
+      );
 
     if (!isMember) {
       return NextResponse.json(
@@ -180,24 +252,28 @@ export async function GET(request: Request) {
       where: {
         projectId,
       },
+      orderBy: {
+        createdAt: "desc",
+      },
       include: {
         assignee: {
           select: {
             id: true,
             name: true,
             email: true,
-            image: true,
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
-      },
     });
 
-    return NextResponse.json({ tasks });
+    return NextResponse.json({
+      tasks,
+    });
   } catch (error) {
-    console.error("Get tasks error:", error);
+    console.error(
+      "GET /api/tasks error:",
+      error
+    );
 
     return NextResponse.json(
       { error: "Unable to load tasks." },
